@@ -15,11 +15,12 @@
  */
 package org.mvcspec.ozark.core;
 
+import org.mvcspec.ozark.cdi.OzarkCdiExtension;
 import org.mvcspec.ozark.engine.ViewEngineContextImpl;
 import org.mvcspec.ozark.engine.ViewEngineFinder;
+import org.mvcspec.ozark.engine.Viewable;
 import org.mvcspec.ozark.event.AfterProcessViewEventImpl;
 import org.mvcspec.ozark.event.BeforeProcessViewEventImpl;
-import org.mvcspec.ozark.cdi.OzarkCdiExtension;
 import org.mvcspec.ozark.util.PathUtils;
 
 import javax.enterprise.event.Event;
@@ -27,7 +28,6 @@ import javax.enterprise.inject.Instance;
 import javax.inject.Inject;
 import javax.mvc.Models;
 import javax.mvc.MvcContext;
-import org.mvcspec.ozark.engine.Viewable;
 import javax.mvc.engine.ViewEngine;
 import javax.mvc.engine.ViewEngineException;
 import javax.mvc.event.AfterProcessViewEvent;
@@ -53,11 +53,8 @@ import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
-import java.nio.charset.Charset;
 
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 
@@ -77,9 +74,6 @@ import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
  */
 @Produces(MediaType.WILDCARD)
 public class ViewableWriter implements MessageBodyWriter<Viewable> {
-
-    public static final String CONTENT_TYPE = "Content-Type";
-    public static final Charset UTF8 = Charset.forName("UTF-8");
 
     @Inject
     private Instance<Models> modelsInstance;
@@ -172,19 +166,6 @@ public class ViewableWriter implements MessageBodyWriter<Viewable> {
                 throw new UnsupportedOperationException("Not supported");
             }
         };
-        final PrintWriter responseWriter = new PrintWriter(new OutputStreamWriter(responseStream, getCharset(headers)));
-        final HttpServletResponse responseWrapper = new HttpServletResponseWrapper(response) {
-
-            @Override
-            public ServletOutputStream getOutputStream() throws IOException {
-                return responseStream;
-            }
-
-            @Override
-            public PrintWriter getWriter() throws IOException {
-                return responseWriter;
-            }
-        };
 
         // Pass request to view engine
         try {
@@ -206,7 +187,7 @@ public class ViewableWriter implements MessageBodyWriter<Viewable> {
             }
 
             // Process view using selected engine
-            engine.processView(new ViewEngineContextImpl(viewable.getView(), models, request, responseWrapper,
+            engine.processView(new ViewEngineContextImpl(viewable.getView(), models, request, response,
                     headers, responseStream, mediaType, uriInfo, resourceInfo, config));
 
             // Fire AfterProcessView event
@@ -219,20 +200,8 @@ public class ViewableWriter implements MessageBodyWriter<Viewable> {
         } catch (ViewEngineException e) {
             throw new ServerErrorException(INTERNAL_SERVER_ERROR, e);
         } finally {
-            responseWriter.flush();
+            out.flush();
         }
     }
 
-    /**
-     * Looks for a character set as part of the Content-Type header. Returns it
-     * if specified or {@link #UTF8} if not.
-     *
-     * @param headers Response headers.
-     * @return Character set to use.
-     */
-    private Charset getCharset(MultivaluedMap<String, Object> headers) {
-        final MediaType mt = (MediaType) headers.get(CONTENT_TYPE).get(0);
-        final String charset = mt.getParameters().get(MediaType.CHARSET_PARAMETER);
-        return charset != null ? Charset.forName(charset) : UTF8;
-    }
 }

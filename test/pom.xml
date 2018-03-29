@@ -61,6 +61,7 @@
         <module>csrf</module>
         <module>csrf-property</module>
         <module>events</module>
+        <module>encoding</module>
         <module>exceptions</module>
         <module>facelets</module>
         <module>freemarker</module>

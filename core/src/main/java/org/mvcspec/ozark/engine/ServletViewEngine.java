@@ -25,10 +25,16 @@ import javax.servlet.ServletRegistration;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletResponseWrapper;
+import javax.ws.rs.core.HttpHeaders;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Base class for servlet-based view engines like JSPs and Facelets. Implements
@@ -38,6 +44,8 @@ import java.util.Map;
  * @author Santiago Pericas-Geertsen
  */
 public abstract class ServletViewEngine extends ViewEngineBase {
+
+    private static final Logger LOG = Logger.getLogger(ServletViewEngine.class.getName());
 
     @Inject
     protected ServletContext servletContext;
@@ -64,11 +72,33 @@ public abstract class ServletViewEngine extends ViewEngineBase {
         HttpServletRequest request = context.getRequest(HttpServletRequest.class);
         final HttpServletResponse response = context.getResponse(HttpServletResponse.class);
 
+        Charset charset = resolveCharsetAndSetContentType(context);
+        String contentType = context.getResponseHeaders().getFirst(HttpHeaders.CONTENT_TYPE).toString();
+        final PrintWriter responseWriter = new PrintWriter(new OutputStreamWriter(response.getOutputStream(), charset));
+
+        LOG.info(String.format("Using charset '%s' and Content-Type '%s'", charset.toString(), contentType));
+
         // Set attributes in request before forward
         final Models models = context.getModels();
         for (String name : models) {
             request.setAttribute(name, models.get(name));
         }
+
+        HttpServletResponse wrappedResponse = new HttpServletResponseWrapper(response) {
+            @Override
+            public PrintWriter getWriter() throws IOException {
+                return responseWriter;
+            }
+
+            @Override
+            public void setContentType(String type) {
+                if (!type.equals(contentType)) {
+                    LOG.warning(String.format(
+                        "Using ContentType '%s' instead of '%s'. Please use @Produces instead of the contentType page directive of JSPs",
+                        contentType, type));
+                }
+            }
+        };
 
         // Find request dispatcher based on extensions
         for (Map.Entry<String, ? extends ServletRegistration> e : servletContext.getServletRegistrations().entrySet()) {
@@ -101,13 +131,11 @@ public abstract class ServletViewEngine extends ViewEngineBase {
                 break;
             }
         }
-
         // If none found, go through servlet mapping
         if (rd == null) {
             rd = servletContext.getRequestDispatcher(resolveView(context));
         }
-
         // Forward request to servlet
-        rd.forward(request, response);
+        rd.forward(request, wrappedResponse);
     }
 }
